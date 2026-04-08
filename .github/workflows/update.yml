@@ -29,7 +29,7 @@ jobs:
       - name: 转换为edgetunnel认识的格式
         run: |
           echo "" > ips.txt
-          tail -n +2 result.csv | awk -F, '{printf "%s:443#自动测速_延迟%sms\n", $1, $5}' >> ips.txt
+          tail -n +2 result.csv | head -n 30 | awk -F, '{printf "%s:443#自动测速_延迟%sms\n", $1, $5}' >> ips.txt
 
       - name: 保存测速结果到仓库
         run: |
