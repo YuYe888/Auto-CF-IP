@@ -1,0 +1,40 @@
+name: 自动获取CF优选IP
+
+on:
+  schedule:
+    - cron: '0 20 * * *' # 每天北京时间凌晨4点自动运行
+  workflow_dispatch: # 允许你在网页上直接点按钮运行
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 下载测速工具
+        run: |
+          wget https://github.com/XIU2/CloudflareSpeedTest/releases/download/v2.2.5/CloudflareST_linux_amd64.tar.gz
+          tar -zxf CloudflareST_linux_amd64.tar.gz
+          chmod +x CloudflareST
+
+      - name: 开始测速并筛选
+        run: |
+          # 找出延迟低于200ms，速度大于5MB/s的前30个IP
+          ./CloudflareST -tl 200 -sl 5 -dn 30 -o result.csv
+
+      - name: 转换为edgetunnel认识的格式
+        run: |
+          echo "" > ips.txt
+          tail -n +2 result.csv | awk -F, '{printf "%s:443#自动测速_延迟%sms\n", $1, $5}' >> ips.txt
+
+      - name: 保存测速结果到仓库
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add ips.txt result.csv
+          git commit -m "更新最新优选IP" || exit 0
+          git push
