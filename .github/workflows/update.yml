@@ -1,4 +1,4 @@
-name: 自动获取CF优选IP
+name: 自动获取CF优选IP并查询中文归属地
 
 on:
   schedule:
@@ -26,15 +26,25 @@ jobs:
           # 找出延迟低于200ms，速度大于5MB/s的前30个IP
           ./CloudflareST -tl 200 -sl 5 -dn 30 -o result.csv
 
-      - name: 转换为edgetunnel认识的格式
+      - name: 查询归属地并转换格式
         run: |
           echo "" > ips.txt
-          tail -n +2 result.csv | head -n 30 | awk -F, '{printf "%s:443#自动测速_延迟%sms\n", $1, $5}' >> ips.txt
+          # 读取测速结果，跳过表头，提取前30个IP
+          tail -n +2 result.csv | head -n 30 | while IFS=, read -r ip sent recv loss ping speed rest; do
+            # 调用API查询IP归属，lang=zh-CN指定中文，并提取"国家代码+中文国家名" (例如 US美国)
+            loc=$(curl -s -m 2 "http://ip-api.com/json/$ip?lang=zh-CN" | jq -r 'if .status == "success" then .countryCode + .country else "未知地区" end')
+            
+            # 为了防止查得太快被封禁，每次查完休息1秒
+            sleep 1
+            
+            # 拼接成最终格式，例如： 104.16.x.x:443#US美国_延迟150ms
+            printf "%s:443#%s_延迟%sms\n" "$ip" "$loc" "$ping" >> ips.txt
+          done
 
       - name: 保存测速结果到仓库
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git add ips.txt result.csv
-          git commit -m "更新最新优选IP" || exit 0
+          git commit -m "更新优选IP与中文归属地" || exit 0
           git push
